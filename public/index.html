@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pago — Yape, Plin o Mercado Pago</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="header">
+        <div class="payment-page-brand">
+          <img
+            src="/images/turbo-prediction-logo.jpg"
+            alt="Turbo Prediction"
+            class="payment-page-logo"
+            width="280"
+            decoding="async"
+          />
+        </div>
+        <h1>Registrar pago</h1>
+        <p class="lead">
+          Paso 1: tus datos. Paso 2: elige créditos, método de pago y (con Yape o Plin) el QR. Paso 3:
+          comprobante y número de operación. Mercado Pago abre el checkout al continuar en el paso 2.
+        </p>
+      </header>
+
+      <div
+        id="payment-status-pending-card"
+        class="payment-status-card payment-status-card--pending"
+        hidden
+      >
+        <div class="payment-status-inner">
+          <div class="payment-status-spinner" role="status" aria-label="Cargando"></div>
+          <p class="payment-status-msg payment-status-msg--pending">
+            Su pago está siendo procesado, espere unos minutos, por favor.
+          </p>
+        </div>
+      </div>
+
+      <div id="payment-status-success-card" class="payment-status-card payment-status-card--success" hidden>
+        <div class="payment-status-success">
+          <div class="payment-status-check-wrap" role="img" aria-label="Verificado">
+            <svg
+              class="payment-status-check-icon"
+              viewBox="0 0 52 52"
+              width="52"
+              height="52"
+              aria-hidden="true"
+            >
+              <circle class="payment-status-check-bg" cx="26" cy="26" r="25" />
+              <path
+                class="payment-status-check-mark"
+                d="M14 27l8 8 16-16"
+                fill="none"
+                stroke-width="3.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </div>
+          <p class="payment-status-msg" id="payment-status-success-lead"></p>
+          <code class="payment-status-token" id="payment-status-token-display"></code>
+          <p class="payment-status-msg payment-status-hint" id="payment-status-success-hint"></p>
+          <button type="button" class="btn primary" id="payment-status-new-btn">
+            Registrar otro pago
+          </button>
+        </div>
+      </div>
+
+      <main class="card" id="payment-flow-card">
+        <form
+          id="payment-form"
+          class="form"
+          data-current-step="1"
+          enctype="multipart/form-data"
+          novalidate
+        >
+          <nav class="stepper" aria-label="Pasos del registro">
+            <ol class="stepper-list">
+              <li class="stepper-item is-active" id="stepper-item-1" data-step="1">
+                <button
+                  type="button"
+                  class="stepper-trigger"
+                  id="stepper-trigger-1"
+                  aria-current="step"
+                  aria-label="Paso 1: Datos"
+                >
+                  <span class="stepper-badge" aria-hidden="true">1</span>
+                  <span class="stepper-label">Datos</span>
+                </button>
+              </li>
+              <li class="stepper-line" aria-hidden="true"></li>
+              <li class="stepper-item" id="stepper-item-2" data-step="2">
+                <button
+                  type="button"
+                  class="stepper-trigger"
+                  id="stepper-trigger-2"
+                  aria-label="Paso 2: Pago"
+                >
+                  <span class="stepper-badge" aria-hidden="true">2</span>
+                  <span class="stepper-label">Pago</span>
+                </button>
+              </li>
+              <li class="stepper-line" aria-hidden="true"></li>
+              <li class="stepper-item" id="stepper-item-3" data-step="3">
+                <button
+                  type="button"
+                  class="stepper-trigger"
+                  id="stepper-trigger-3"
+                  aria-label="Paso 3: Comprobante"
+                >
+                  <span class="stepper-badge" aria-hidden="true">3</span>
+                  <span class="stepper-label">Comprobante</span>
+                </button>
+              </li>
+            </ol>
+          </nav>
+
+          <p id="form-message" class="message" hidden></p>
+
+          <div id="step-1-panel" class="step-panel">
+            <label class="field">
+              <span>Nombre completo</span>
+              <input name="nombre" type="text" required autocomplete="name" placeholder="Tu nombre" />
+            </label>
+            <label class="field">
+              <span>Correo electrónico</span>
+              <input name="email" type="email" required autocomplete="email" placeholder="correo@ejemplo.com" />
+            </label>
+            <label class="field">
+              <span>Teléfono</span>
+              <input name="telefono" type="tel" required autocomplete="tel" placeholder="Ej. 987654321" />
+            </label>
+
+            <div class="step-actions">
+              <button type="submit" class="btn primary" id="submit-btn">Continuar</button>
+            </div>
+          </div>
+
+          <div id="step-2-panel" class="step-panel" hidden>
+            <fieldset class="methods">
+              <legend>Compra de créditos</legend>
+              <label class="radio">
+                <input type="radio" name="creditos" value="50" required />
+                <span>50 créditos — S/ 30</span>
+              </label>
+              <label class="radio">
+                <input type="radio" name="creditos" value="80" />
+                <span>80 créditos — S/ 50</span>
+              </label>
+              <label class="radio">
+                <input type="radio" name="creditos" value="100" />
+                <span>100 créditos — S/ 60</span>
+              </label>
+            </fieldset>
+
+            <fieldset class="methods">
+              <legend>Método de pago</legend>
+              <label class="radio">
+                <input type="radio" name="metodo" value="yape" required />
+                <span>Yape</span>
+              </label>
+              <label class="radio">
+                <input type="radio" name="metodo" value="plin" />
+                <span>Plin</span>
+              </label>
+              <label class="radio">
+                <input type="radio" name="metodo" value="mercadopago" />
+                <span>Mercado Pago</span>
+              </label>
+            </fieldset>
+
+            <div class="step-actions">
+              <button type="submit" class="btn primary" id="submit-btn-step2">Continuar</button>
+            </div>
+          </div>
+
+          <div id="step-3-panel" class="step-panel" hidden>
+            <h3 class="step-2-title">Paso 3 — Comprobante y operación</h3>
+            <p class="step-2-lead">
+              Indica el <strong>número de operación</strong> (obligatorio). Puedes adjuntar captura o PDF del
+              comprobante (opcional).
+            </p>
+            <div id="post-qr-fields" class="post-qr-fields">
+              <label class="field">
+                <span>Comprobante (opcional)</span>
+                <input
+                  type="file"
+                  id="post-qr-comprobante"
+                  name="comprobante"
+                  accept="image/*,application/pdf"
+                />
+              </label>
+              <label class="field">
+                <span>Número de operación</span>
+                <input
+                  type="text"
+                  id="post-qr-referencia"
+                  name="referencia"
+                  autocomplete="off"
+                  placeholder="Código que te dio Yape, Plin o tu banco"
+                />
+              </label>
+            </div>
+            <div class="step-actions">
+              <button type="submit" class="btn primary" id="submit-btn-step3">Registrar pago</button>
+            </div>
+          </div>
+        </form>
+      </main>
+
+      <footer class="footer">
+        <a href="/admin">Acceso administración</a>
+      </footer>
+    </div>
+
+    <div id="qr-modal" class="modal" aria-hidden="true">
+      <div class="modal-backdrop" id="qr-modal-backdrop"></div>
+      <div class="modal-panel card" role="dialog" aria-labelledby="qr-modal-title">
+        <h2 id="qr-modal-title" class="modal-heading">Pagar</h2>
+        <p id="qr-modal-amount" class="lead modal-amount"></p>
+        <div id="qr-modal-img-wrap" class="qr-modal-img-wrap">
+          <img id="qr-modal-img" src="" alt="" width="280" height="280" />
+        </div>
+        <p id="qr-modal-missing" class="message error" hidden>
+          Aún no hay QR configurado. Puedes pagar por otro medio o volver más tarde.
+        </p>
+        <p class="modal-hint">
+          Tras pagar, pulsa <strong>Entendido</strong> para ir al <strong>paso 3</strong> y completar el
+          comprobante y el número de operación.
+        </p>
+        <button type="button" class="btn primary" id="qr-modal-close">Entendido</button>
+      </div>
+    </div>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

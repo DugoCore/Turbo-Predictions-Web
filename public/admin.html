@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Administración — Pagos</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div id="login-section" class="login-card" hidden>
+      <h1>Acceso administración</h1>
+      <form id="login-form" class="form">
+        <label class="field">
+          <span>Contraseña</span>
+          <input name="password" type="password" required autocomplete="current-password" />
+        </label>
+        <p id="login-msg" class="message error" hidden></p>
+        <button type="submit" class="btn primary">Entrar</button>
+      </form>
+      <p style="margin-top: 1.25rem; margin-bottom: 0">
+        <a href="/" style="color: var(--muted); font-size: 0.9rem">← Volver al formulario</a>
+      </p>
+    </div>
+
+    <div id="panel-section" class="admin-shell" hidden>
+      <header class="admin-topbar">
+        <div class="admin-topbar-start">
+          <button
+            type="button"
+            class="admin-sidebar-toggle"
+            id="admin-sidebar-toggle"
+            aria-expanded="true"
+            aria-controls="admin-sidebar"
+          >
+            <span class="admin-sidebar-toggle-bars" aria-hidden="true">
+              <span></span><span></span><span></span>
+            </span>
+            <span class="admin-sidebar-toggle-text">Ocultar menú</span>
+          </button>
+          <h1 class="admin-topbar-title">Administración</h1>
+        </div>
+        <div class="admin-topbar-actions">
+          <a href="/" class="btn ghost" style="text-decoration: none; display: inline-block">Formulario público</a>
+          <button type="button" class="btn ghost" id="logout-btn">Cerrar sesión</button>
+        </div>
+      </header>
+
+      <div class="admin-layout">
+        <aside id="admin-sidebar" class="admin-sidebar">
+          <nav class="admin-sidebar-nav" aria-label="Secciones">
+            <button type="button" class="admin-nav-item is-active" data-view="pagos">
+              Pagos
+            </button>
+            <button type="button" class="admin-nav-item" data-view="qr">QR</button>
+          </nav>
+        </aside>
+
+        <div class="admin-main">
+          <section
+            id="admin-view-pagos"
+            class="admin-view is-active"
+            aria-labelledby="admin-pagos-heading"
+          >
+            <h2 id="admin-pagos-heading" class="admin-view-title">Pagos registrados</h2>
+            <div class="admin-table-card">
+              <div id="table-container" class="table-wrap">
+                <p class="empty" id="loading">Cargando…</p>
+              </div>
+            </div>
+          </section>
+
+          <section id="admin-view-qr" class="admin-view" aria-labelledby="admin-qr-heading">
+            <h2 id="admin-qr-heading" class="admin-view-title">Códigos QR (Yape y Plin)</h2>
+            <p class="lead admin-view-lead">
+              Sube la imagen del QR que verán los clientes al elegir Yape o Plin. Formatos: JPEG, PNG,
+              GIF o WebP (máx. 2 MB).
+            </p>
+            <div class="qr-admin-grid">
+              <div class="qr-admin-card">
+                <h3>Yape</h3>
+                <div class="qr-admin-preview" id="qr-preview-yape">
+                  <span class="empty">Sin imagen</span>
+                </div>
+                <label class="field">
+                  <span>Archivo</span>
+                  <input type="file" id="qr-file-yape" accept="image/jpeg,image/png,image/gif,image/webp" />
+                </label>
+                <button type="button" class="btn primary" id="qr-upload-yape" style="width: 100%">
+                  Subir QR Yape
+                </button>
+                <p id="qr-msg-yape" class="message" style="margin-top: 0.75rem; margin-bottom: 0" hidden></p>
+              </div>
+              <div class="qr-admin-card">
+                <h3>Plin</h3>
+                <div class="qr-admin-preview" id="qr-preview-plin">
+                  <span class="empty">Sin imagen</span>
+                </div>
+                <label class="field">
+                  <span>Archivo</span>
+                  <input type="file" id="qr-file-plin" accept="image/jpeg,image/png,image/gif,image/webp" />
+                </label>
+                <button type="button" class="btn primary" id="qr-upload-plin" style="width: 100%">
+                  Subir QR Plin
+                </button>
+                <p id="qr-msg-plin" class="message" style="margin-top: 0.75rem; margin-bottom: 0" hidden></p>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <div id="comprobante-modal" class="modal admin-comprobante-modal" aria-hidden="true">
+      <div class="modal-backdrop" id="comprobante-modal-backdrop"></div>
+      <div class="admin-comprobante-panel" role="dialog" aria-modal="true" aria-label="Vista del comprobante">
+        <button type="button" class="admin-comprobante-close" id="comprobante-modal-close" aria-label="Cerrar">
+          ×
+        </button>
+        <div id="comprobante-modal-body" class="admin-comprobante-body"></div>
+      </div>
+    </div>
+
+    <script type="module" src="/admin.js"></script>
+  </body>
+</html>

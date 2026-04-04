@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Resultado del pago</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="header">
+        <h1 id="title">Gracias</h1>
+        <p class="lead" id="lead"></p>
+      </header>
+      <main class="card">
+        <p id="detail" class="message success"></p>
+        <p><a href="/" class="btn primary" id="home-link">Volver al inicio</a></p>
+      </main>
+      <footer class="footer">
+        <a href="/admin">Acceso administración</a>
+      </footer>
+    </div>
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get("token");
+      if (token) {
+        try {
+          localStorage.setItem("tp_payment_token", token);
+        } catch {
+          /* ignore */
+        }
+        window.location.replace("/?token=" + encodeURIComponent(token));
+      } else {
+        const estado = (params.get("estado") || "").toLowerCase();
+        const title = document.getElementById("title");
+        const lead = document.getElementById("lead");
+        const detail = document.getElementById("detail");
+        if (estado === "aprobado") {
+          title.textContent = "Pago aprobado";
+          lead.textContent = "Tu pago se procesó correctamente.";
+          detail.textContent =
+            "Recibirás la confirmación por correo según la configuración de Mercado Pago. Puedes cerrar esta página.";
+        } else if (estado === "pendiente") {
+          title.textContent = "Pago pendiente";
+          lead.textContent = "El pago está en proceso o pendiente de confirmación.";
+          detail.textContent =
+            "Cuando se acredite, lo verás reflejado. Puedes volver más tarde o revisar tu cuenta de Mercado Pago.";
+          detail.className = "message";
+        } else {
+          title.textContent = "Pago no completado";
+          lead.textContent = "No se completó el cobro o fue rechazado.";
+          detail.textContent = "Puedes intentar de nuevo desde la página de pago.";
+          detail.className = "message error";
+        }
+      }
+    </script>
+  </body>
+</html>
