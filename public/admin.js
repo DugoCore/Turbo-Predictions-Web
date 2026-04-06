@@ -98,8 +98,12 @@ function closeComprobanteModal() {
 }
 
 async function checkSession() {
-  const res = await fetch("/api/admin/me", { credentials: "same-origin" });
-  const data = await res.json();
+  const res = await fetch("/api/admin/me", {
+    credentials: "same-origin",
+    cache: "no-store",
+  });
+  if (!res.ok) return false;
+  const data = await res.json().catch(() => ({}));
   return data.admin === true;
 }
 
@@ -148,7 +152,10 @@ navItems.forEach((btn) => {
 async function loadPayments() {
   loading.textContent = "Cargando…";
   loading.className = "empty";
-  const res = await fetch("/api/payments", { credentials: "same-origin" });
+  const res = await fetch("/api/payments", {
+    credentials: "same-origin",
+    cache: "no-store",
+  });
   if (res.status === 401) {
     showLogin();
     return;
@@ -229,7 +236,10 @@ function setQrPreview(metodo, url) {
 
 async function loadQrPreviews() {
   try {
-    const res = await fetch("/api/payment-qr", { credentials: "same-origin" });
+    const res = await fetch("/api/payment-qr", {
+      credentials: "same-origin",
+      cache: "no-store",
+    });
     if (!res.ok) return;
     const urls = await res.json();
     setQrPreview("yape", urls.yape || null);
@@ -257,6 +267,7 @@ async function uploadQr(metodo) {
     method: "POST",
     body: fd,
     credentials: "same-origin",
+    cache: "no-store",
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -289,6 +300,7 @@ tableContainer.addEventListener("click", (e) => {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           credentials: "same-origin",
+          cache: "no-store",
           body: JSON.stringify({ verificado: next }),
         });
         const data = await res.json().catch(() => ({}));
@@ -322,6 +334,7 @@ tableContainer.addEventListener("click", (e) => {
         const res = await fetch(`/api/payments/${encodeURIComponent(id)}`, {
           method: "DELETE",
           credentials: "same-origin",
+          cache: "no-store",
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
@@ -361,6 +374,7 @@ loginForm.addEventListener("submit", async (e) => {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "same-origin",
+    cache: "no-store",
     body: JSON.stringify({ password: fd.get("password") }),
   });
   const data = await res.json().catch(() => ({}));
@@ -376,17 +390,26 @@ loginForm.addEventListener("submit", async (e) => {
 });
 
 logoutBtn.addEventListener("click", async () => {
-  await fetch("/api/admin/logout", { method: "POST", credentials: "same-origin" });
+  await fetch("/api/admin/logout", {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+  });
   showLogin();
 });
 
 (async function init() {
-  const ok = await checkSession();
-  if (ok) {
-    showPanel();
-    await loadPayments();
-    await loadQrPreviews();
-  } else {
+  try {
+    const ok = await checkSession();
+    if (ok) {
+      showPanel();
+      await loadPayments();
+      await loadQrPreviews();
+    } else {
+      showLogin();
+      tableContainer.innerHTML = "";
+    }
+  } catch {
     showLogin();
     tableContainer.innerHTML = "";
   }

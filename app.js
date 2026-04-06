@@ -123,6 +123,20 @@ app.use(
   })
 );
 
+app.use((req, res, next) => {
+  const p = req.path || "";
+  const m = req.method;
+  const paymentsAuth =
+    (m === "GET" && p === "/api/payments") ||
+    (m === "PATCH" && /^\/api\/payments\/[^/]+\/verificado$/.test(p)) ||
+    (m === "DELETE" && /^\/api\/payments\/[^/]+$/.test(p));
+  if (p.startsWith("/api/admin") || paymentsAuth) {
+    res.set("Cache-Control", "private, no-store, must-revalidate");
+    res.set("Vary", "Cookie");
+  }
+  next();
+});
+
 app.use(express.static(path.join(rootDir, "public")));
 
 const uploadQr = multer({
