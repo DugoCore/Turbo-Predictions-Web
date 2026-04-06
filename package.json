@@ -11,6 +11,7 @@
     "node": "24.x"
   },
   "dependencies": {
+    "@vercel/blob": "^2.3.3",
     "better-sqlite3": "^11.7.0",
     "cookie-session": "^2.1.0",
     "dotenv": "^16.4.7",

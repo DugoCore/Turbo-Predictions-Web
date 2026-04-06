@@ -1,4 +1,3 @@
-import crypto from "crypto";
 import express from "express";
 import cookieSession from "cookie-session";
 import fs from "fs";
@@ -28,6 +27,7 @@ import {
   isMercadoPagoConfigured,
 } from "./lib/mercadopago.js";
 import { fetchVoucherForCreditPackage } from "./lib/voucherService.js";
+import { removeComprobanteFile, saveComprobanteFile } from "./lib/comprobanteStorage.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123";
@@ -149,21 +149,6 @@ const uploadQr = multer({
     cb(new Error("INVALID_IMAGE_TYPE"));
   },
 });
-
-function extComprobante(mimetype, originalname) {
-  if (mimetype === "application/pdf") return ".pdf";
-  if (mimetype === "image/heic" || mimetype === "image/heif") return ".heic";
-  const e = extFromMime(mimetype);
-  if (e !== ".img") return e;
-  const fromName = (path.extname(originalname || "") || "").toLowerCase();
-  if (/^\.(jpe?g|png|gif|webp|pdf)$/.test(fromName)) {
-    return fromName;
-  }
-  if (String(mimetype || "").startsWith("image/")) {
-    return ".jpg";
-  }
-  return ".jpg";
-}
 
 const uploadComprobante = multer({
   storage: multer.memoryStorage(),
@@ -398,11 +383,7 @@ app.post("/api/payments", uploadComprobante.any(), async (req, res, next) => {
 
     let comprobantePath = null;
     if (file?.buffer?.length) {
-      const dir = path.join(rootDir, "public", "uploads", "comprobantes");
-      fs.mkdirSync(dir, { recursive: true });
-      const name = `${crypto.randomUUID()}${extComprobante(file.mimetype, file.originalname)}`;
-      fs.writeFileSync(path.join(dir, name), file.buffer);
-      comprobantePath = `/uploads/comprobantes/${name}`;
+      comprobantePath = await saveComprobanteFile(file, { rootDir, isVercel });
     }
 
     const row = await insertPayment({
@@ -519,17 +500,7 @@ app.delete("/api/payments/:id", requireAdmin, async (req, res, next) => {
     if (!row) {
       return res.status(404).json({ error: "Registro no encontrado" });
     }
-    if (row.comprobante_path) {
-      try {
-        const rel = String(row.comprobante_path).replace(/^\//, "");
-        const abs = path.join(rootDir, "public", rel);
-        if (fs.existsSync(abs)) {
-          fs.unlinkSync(abs);
-        }
-      } catch (err) {
-        console.error("Al borrar archivo de comprobante:", err);
-      }
-    }
+    await removeComprobanteFile(row.comprobante_path, { rootDir });
     const ok = await deletePaymentById(id);
     if (!ok) {
       return res.status(404).json({ error: "No se pudo eliminar" });
@@ -569,6 +540,9 @@ app.use((err, _req, res, _next) => {
   const msg = typeof err?.message === "string" ? err.message : "";
   if (msg.includes("DATABASE_URL")) {
     return res.status(503).json({ error: msg });
+  }
+  if (err?.code === "BLOB_TOKEN_REQUIRED") {
+    return res.status(503).json({ error: msg || "Configura Vercel Blob para adjuntos." });
   }
   res.status(500).json({ error: "Error del servidor" });
 });
