@@ -383,7 +383,7 @@ app.post("/api/payments", uploadComprobante.any(), async (req, res, next) => {
 
     let comprobantePath = null;
     if (file?.buffer?.length) {
-      comprobantePath = await saveComprobanteFile(file, { rootDir, isVercel });
+      comprobantePath = await saveComprobanteFile(file, { rootDir });
     }
 
     const row = await insertPayment({
@@ -543,6 +543,9 @@ app.use((err, _req, res, _next) => {
   }
   if (err?.code === "BLOB_TOKEN_REQUIRED") {
     return res.status(503).json({ error: msg || "Configura Vercel Blob para adjuntos." });
+  }
+  if (err?.code === "BLOB_UPLOAD_FAILED") {
+    return res.status(503).json({ error: msg || "No se pudo guardar el comprobante." });
   }
   res.status(500).json({ error: "Error del servidor" });
 });
