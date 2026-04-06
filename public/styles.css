@@ -195,6 +195,12 @@ textarea:focus {
 }
 
 /* Admin */
+/* Evitar que .admin-shell { display: flex } anule el atributo HTML [hidden] */
+#panel-section[hidden],
+#login-section[hidden] {
+  display: none !important;
+}
+
 .admin-shell {
   min-height: 100vh;
   display: flex;
