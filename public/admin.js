@@ -3,7 +3,6 @@ const panelSection = document.getElementById("panel-section");
 const loginForm = document.getElementById("login-form");
 const loginMsg = document.getElementById("login-msg");
 const tableContainer = document.getElementById("table-container");
-const loading = document.getElementById("loading");
 const logoutBtn = document.getElementById("logout-btn");
 const viewPagos = document.getElementById("admin-view-pagos");
 const viewQr = document.getElementById("admin-view-qr");
@@ -150,22 +149,37 @@ navItems.forEach((btn) => {
 });
 
 async function loadPayments() {
-  loading.textContent = "Cargando…";
-  loading.className = "empty";
-  const res = await fetch("/api/payments", {
-    credentials: "same-origin",
-    cache: "no-store",
-  });
-  if (res.status === 401) {
-    showLogin();
-    return;
-  }
-  const rows = await res.json();
+  tableContainer.innerHTML = '<p class="empty">Cargando…</p>';
+  try {
+    const res = await fetch("/api/payments", {
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    if (res.status === 401) {
+      showLogin();
+      tableContainer.innerHTML = "";
+      return;
+    }
+    const payload = await res.json().catch(() => null);
+    if (!res.ok) {
+      const msg =
+        payload && typeof payload === "object" && payload.error
+          ? String(payload.error)
+          : "No se pudieron cargar los pagos.";
+      tableContainer.innerHTML = `<p class="empty message error">${escapeHtml(msg)}</p>`;
+      return;
+    }
+    if (!Array.isArray(payload)) {
+      tableContainer.innerHTML =
+        '<p class="empty message error">Respuesta inválida del servidor.</p>';
+      return;
+    }
+    const rows = payload;
 
-  if (!rows.length) {
-    tableContainer.innerHTML = '<p class="empty">No hay pagos registrados aún.</p>';
-    return;
-  }
+    if (!rows.length) {
+      tableContainer.innerHTML = '<p class="empty">No hay pagos registrados aún.</p>';
+      return;
+    }
 
   const thead = `<thead><tr>
     <th>ID</th><th>Voucher</th><th>Fecha</th><th>Nombre</th><th>Email</th><th>Teléfono</th>
@@ -208,7 +222,11 @@ async function loadPayments() {
     )
     .join("");
 
-  tableContainer.innerHTML = `<table>${thead}<tbody>${tbody}</tbody></table>`;
+    tableContainer.innerHTML = `<table>${thead}<tbody>${tbody}</tbody></table>`;
+  } catch {
+    tableContainer.innerHTML =
+      '<p class="empty message error">Error de conexión al cargar los pagos.</p>';
+  }
 }
 
 function escapeHtml(s) {
@@ -389,13 +407,26 @@ loginForm.addEventListener("submit", async (e) => {
   await loadQrPreviews();
 });
 
-logoutBtn.addEventListener("click", async () => {
-  await fetch("/api/admin/logout", {
-    method: "POST",
-    credentials: "same-origin",
-    cache: "no-store",
-  });
-  showLogin();
+logoutBtn?.addEventListener("click", async () => {
+  try {
+    const res = await fetch("/api/admin/logout", {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || "Error al cerrar sesión");
+    }
+    showLogin();
+    tableContainer.innerHTML = "";
+  } catch (err) {
+    const msg =
+      err instanceof Error ? err.message : "No se pudo cerrar sesión. Revisa la conexión.";
+    alert(msg);
+  }
 });
 
 (async function init() {

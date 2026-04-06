@@ -10,7 +10,12 @@
   <body>
     <div id="login-section" class="login-card" hidden>
       <h1>Acceso administración</h1>
-      <form id="login-form" class="form">
+      <form id="login-form" class="form" autocomplete="on">
+        <!-- Chrome: los formularios con contraseña convienen llevar también usuario (a11y / aviso DOM) -->
+        <label class="field" style="position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0">
+          <span>Usuario</span>
+          <input type="text" name="username" autocomplete="username" tabindex="-1" />
+        </label>
         <label class="field">
           <span>Contraseña</span>
           <input name="password" type="password" required autocomplete="current-password" />
