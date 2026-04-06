@@ -566,6 +566,10 @@ app.use((err, _req, res, next) => {
 
 app.use((err, _req, res, _next) => {
   console.error(err);
+  const msg = typeof err?.message === "string" ? err.message : "";
+  if (msg.includes("DATABASE_URL")) {
+    return res.status(503).json({ error: msg });
+  }
   res.status(500).json({ error: "Error del servidor" });
 });
 
