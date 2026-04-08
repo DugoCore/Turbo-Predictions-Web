@@ -5,10 +5,18 @@ const loginMsg = document.getElementById("login-msg");
 const tableContainer = document.getElementById("table-container");
 const logoutBtn = document.getElementById("logout-btn");
 const viewPagos = document.getElementById("admin-view-pagos");
+const viewPrecios = document.getElementById("admin-view-precios");
 const viewQr = document.getElementById("admin-view-qr");
 const navItems = document.querySelectorAll(".admin-nav-item");
 const sidebarToggle = document.getElementById("admin-sidebar-toggle");
 const sidebarToggleText = panelSection?.querySelector(".admin-sidebar-toggle-text");
+const pricesForm = document.getElementById("admin-prices-form");
+const pricesMsg = document.getElementById("admin-prices-msg");
+const packageRows = document.getElementById("admin-package-rows");
+const addPackageBtn = document.getElementById("admin-add-package-btn");
+const methodVisibleYape = document.getElementById("method-visible-yape");
+const methodVisiblePlin = document.getElementById("method-visible-plin");
+const methodVisibleMercadoPago = document.getElementById("method-visible-mercadopago");
 
 const ADMIN_SIDEBAR_COLLAPSED_KEY = "tp_admin_sidebar_collapsed";
 
@@ -112,9 +120,9 @@ function showLogin() {
 }
 
 function setAdminView(name) {
-  const isPagos = name === "pagos";
-  if (viewPagos) viewPagos.classList.toggle("is-active", isPagos);
-  if (viewQr) viewQr.classList.toggle("is-active", !isPagos);
+  if (viewPagos) viewPagos.classList.toggle("is-active", name === "pagos");
+  if (viewPrecios) viewPrecios.classList.toggle("is-active", name === "precios");
+  if (viewQr) viewQr.classList.toggle("is-active", name === "qr");
   navItems.forEach((btn) => {
     btn.classList.toggle("is-active", btn.dataset.view === name);
   });
@@ -144,8 +152,149 @@ sidebarToggle?.addEventListener("click", () => {
 navItems.forEach((btn) => {
   btn.addEventListener("click", () => {
     const v = btn.dataset.view;
-    if (v === "pagos" || v === "qr") setAdminView(v);
+    if (v === "pagos" || v === "precios" || v === "qr") setAdminView(v);
   });
+});
+
+function setPricesMessage(text, ok) {
+  if (!pricesMsg) return;
+  pricesMsg.hidden = false;
+  pricesMsg.textContent = text;
+  pricesMsg.className = `message ${ok ? "success" : "error"}`;
+}
+
+function packageRowHtml(index, credits = "", price = "") {
+  const removable = index > 0;
+  return `<div class="admin-package-row" data-row-index="${index}">
+    <label class="field">
+      <span>Créditos</span>
+      <input type="number" data-role="credits" min="1" step="1" required value="${escapeHtml(
+        String(credits)
+      )}" />
+    </label>
+    <label class="field">
+      <span>Precio (S/)</span>
+      <input type="number" data-role="price" min="0.01" step="0.01" required value="${escapeHtml(
+        String(price)
+      )}" />
+    </label>
+    <button type="button" class="btn ghost admin-package-remove" data-role="remove-package" ${
+      removable
+        ? 'aria-label="Quitar paquete"'
+        : "disabled title='Debe existir al menos un paquete' aria-label='No se puede quitar el único paquete'"
+    }>
+      <svg class="admin-package-remove-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polyline points="3 6 5 6 21 6" />
+        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+        <line x1="10" y1="11" x2="10" y2="17" />
+        <line x1="14" y1="11" x2="14" y2="17" />
+      </svg>
+    </button>
+  </div>`;
+}
+
+function renderPackageRows(options) {
+  if (!packageRows) return;
+  const rows = Array.isArray(options) && options.length ? options : [{ credits: 50, price: 30 }];
+  packageRows.innerHTML = rows
+    .map((row, i) => packageRowHtml(i, row?.credits ?? "", row?.price ?? ""))
+    .join("");
+}
+
+function readPackageRows() {
+  if (!packageRows) return [];
+  const rows = Array.from(packageRows.querySelectorAll(".admin-package-row"));
+  return rows.map((row) => ({
+    credits: Number(row.querySelector('[data-role="credits"]')?.value),
+    price: Number(row.querySelector('[data-role="price"]')?.value),
+  }));
+}
+
+function readPaymentMethods() {
+  return {
+    yape: Boolean(methodVisibleYape?.checked),
+    plin: Boolean(methodVisiblePlin?.checked),
+    mercadopago: Boolean(methodVisibleMercadoPago?.checked),
+  };
+}
+
+function applyPaymentMethods(methods) {
+  const src = methods && typeof methods === "object" ? methods : {};
+  if (methodVisibleYape) methodVisibleYape.checked = src.yape !== false;
+  if (methodVisiblePlin) methodVisiblePlin.checked = src.plin !== false;
+  if (methodVisibleMercadoPago) methodVisibleMercadoPago.checked = src.mercadopago !== false;
+}
+
+async function loadAdminPrices() {
+  try {
+    const res = await fetch("/api/admin/prices", {
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    if (res.status === 401) {
+      showLogin();
+      return;
+    }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setPricesMessage(data.error || "No se pudieron cargar los precios.", false);
+      return;
+    }
+    const options = data.packageOptions || data.packagePrices || [];
+    renderPackageRows(options);
+    applyPaymentMethods(data.paymentMethods);
+  } catch {
+    setPricesMessage("Error de conexión al cargar los precios.", false);
+  }
+}
+
+pricesForm?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  pricesMsg.hidden = true;
+  const payload = {
+    packageOptions: readPackageRows(),
+    paymentMethods: readPaymentMethods(),
+  };
+  if (!payload.paymentMethods.yape && !payload.paymentMethods.plin && !payload.paymentMethods.mercadopago) {
+    setPricesMessage("Debes dejar al menos un método de pago visible.", false);
+    return;
+  }
+  try {
+    const res = await fetch("/api/admin/prices", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      cache: "no-store",
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setPricesMessage(data.error || "No se pudieron guardar los precios.", false);
+      return;
+    }
+    renderPackageRows(data.packageOptions || data.packagePrices || payload.packageOptions);
+    applyPaymentMethods(data.paymentMethods || payload.paymentMethods);
+    setPricesMessage("Precios guardados correctamente.", true);
+  } catch {
+    setPricesMessage("Error de conexión al guardar los precios.", false);
+  }
+});
+
+addPackageBtn?.addEventListener("click", () => {
+  const current = readPackageRows();
+  current.push({ credits: "", price: "" });
+  renderPackageRows(current);
+});
+
+packageRows?.addEventListener("click", (e) => {
+  const btn = e.target.closest('[data-role="remove-package"]');
+  if (!btn) return;
+  const current = readPackageRows();
+  const row = btn.closest(".admin-package-row");
+  const idx = Number(row?.getAttribute("data-row-index"));
+  if (!Number.isFinite(idx)) return;
+  const next = current.filter((_, i) => i !== idx);
+  renderPackageRows(next.length ? next : [{ credits: 50, price: 30 }]);
 });
 
 async function loadPayments() {
@@ -182,9 +331,9 @@ async function loadPayments() {
     }
 
   const thead = `<thead><tr>
-    <th>ID</th><th>Voucher</th><th>Fecha</th><th>Nombre</th><th>Email</th><th>Teléfono</th>
+    <th>ID</th><th>Token</th><th>Fecha</th><th>Nombre</th><th>Email</th><th>Teléfono</th>
     <th>Créditos</th><th>Monto (S/)</th>
-    <th>Método</th><th>Referencia</th><th>Comprobante</th><th>Verificado</th><th>Acciones</th>
+    <th>Método</th><th>Referencia</th><th>Comprobante</th><th class="verify-th">Verificado</th><th>Acciones</th>
   </tr></thead>`;
 
   const tbody = rows
@@ -201,22 +350,16 @@ async function loadPayments() {
       <td><span class="badge ${escapeHtml(r.metodo)}">${escapeHtml(methodLabels[r.metodo] || r.metodo)}</span></td>
       <td>${escapeHtml(r.referencia || "—")}</td>
       <td class="comprobante-td">${comprobanteCellHtml(r.comprobante_path)}</td>
-      <td class="verify-td">
-        <button
-          type="button"
-          class="btn btn-verify${r.verificado ? " btn-verify--done" : ""}"
-          data-id="${escapeHtml(String(r.id))}"
-          data-verified="${r.verificado ? "1" : "0"}"
-        >
-          ${
-            r.verificado
-              ? `<span class="btn-verify-inner"><svg class="btn-verify-icon" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Verificado</span>`
-              : "Verificar"
-          }
-        </button>
-      </td>
+      <td class="verify-td">${verifyCellHtml(r)}</td>
       <td class="acciones-td">
-        <button type="button" class="btn btn-delete-payment" data-id="${escapeHtml(String(r.id))}">Eliminar</button>
+        <button type="button" class="btn btn-delete-payment" data-id="${escapeHtml(String(r.id))}" aria-label="Eliminar pago">
+          <svg class="btn-delete-payment-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            <line x1="10" y1="11" x2="10" y2="17"></line>
+            <line x1="14" y1="11" x2="14" y2="17"></line>
+          </svg>
+        </button>
       </td>
     </tr>`
     )
@@ -233,6 +376,56 @@ function escapeHtml(s) {
   const div = document.createElement("div");
   div.textContent = s;
   return div.innerHTML;
+}
+
+const SVG_VERIFY_CHECK =
+  '<svg class="verify-pick-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>';
+const SVG_VERIFY_X =
+  '<svg class="verify-pick-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>';
+const SVG_CELL_CHECK =
+  '<svg class="verify-cell-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7"/></svg>';
+const SVG_CELL_X =
+  '<svg class="verify-cell-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>';
+
+function verifyCellHtml(r) {
+  const id = escapeHtml(String(r.id));
+  const verified = Boolean(r.verificado);
+  const rejected = Boolean(r.verificacion_rechazada) && !verified;
+
+  if (verified) {
+    return `<div class="verify-cell verify-cell--ok" role="status">
+      <span class="verify-cell-inner">
+        ${SVG_CELL_CHECK}
+        <span>Verificado</span>
+      </span>
+    </div>`;
+  }
+  if (rejected) {
+    return `<div class="verify-cell verify-cell--bad" role="status">
+      <span class="verify-cell-inner">
+        ${SVG_CELL_X}
+        <span>No verificado</span>
+      </span>
+      <button type="button" class="btn-verify-reset" data-action="verify-reset" data-id="${id}">Cambiar</button>
+    </div>`;
+  }
+  return `<div class="verify-cell verify-cell--pending" data-verify-id="${id}">
+    <button type="button" class="btn btn-verify btn-verify--neutral" data-action="verify-open" data-id="${id}">Verificar</button>
+    <span class="verify-choice" data-role="verify-choice">
+      <button type="button" class="btn-verify-pick btn-verify-pick--yes" data-action="verify-yes" data-id="${id}" aria-label="Confirmar verificación">${SVG_VERIFY_CHECK}</button>
+      <button type="button" class="btn-verify-pick btn-verify-pick--no" data-action="verify-no" data-id="${id}" aria-label="Rechazar verificación">${SVG_VERIFY_X}</button>
+    </span>
+  </div>`;
+}
+
+function closeAllVerifyChoices() {
+  document.querySelectorAll(".verify-cell--choosing").forEach((el) => {
+    el.classList.remove("verify-cell--choosing");
+    const choice = el.querySelector('[data-role="verify-choice"]');
+    if (choice) choice.hidden = true;
+    const openBtn = el.querySelector('[data-action="verify-open"]');
+    if (openBtn) openBtn.hidden = false;
+  });
 }
 
 function setQrPreview(metodo, url) {
@@ -305,13 +498,23 @@ document.getElementById("qr-upload-yape")?.addEventListener("click", () => uploa
 document.getElementById("qr-upload-plin")?.addEventListener("click", () => uploadQr("plin"));
 
 tableContainer.addEventListener("click", (e) => {
-  const verifyBtn = e.target.closest(".btn-verify");
-  if (verifyBtn) {
-    const id = verifyBtn.getAttribute("data-id");
+  const verifyOpen = e.target.closest('[data-action="verify-open"]');
+  if (verifyOpen) {
+    e.stopPropagation();
+    const cell = verifyOpen.closest(".verify-cell--pending");
+    document.querySelectorAll(".verify-cell--choosing").forEach((c) => {
+      if (c !== cell) c.classList.remove("verify-cell--choosing");
+    });
+    cell?.classList.add("verify-cell--choosing");
+    return;
+  }
+
+  const verifyYes = e.target.closest('[data-action="verify-yes"]');
+  if (verifyYes) {
+    e.stopPropagation();
+    const id = verifyYes.getAttribute("data-id");
     if (!id) return;
-    const wasVerified = verifyBtn.getAttribute("data-verified") === "1";
-    const next = !wasVerified;
-    verifyBtn.disabled = true;
+    verifyYes.disabled = true;
     (async () => {
       try {
         const res = await fetch(`/api/payments/${encodeURIComponent(id)}/verificado`, {
@@ -319,7 +522,69 @@ tableContainer.addEventListener("click", (e) => {
           headers: { "Content-Type": "application/json" },
           credentials: "same-origin",
           cache: "no-store",
-          body: JSON.stringify({ verificado: next }),
+          body: JSON.stringify({ verificado: true }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          alert(data.error || "No se pudo actualizar");
+          return;
+        }
+        closeAllVerifyChoices();
+        await loadPayments();
+      } catch {
+        alert("Error de conexión");
+      } finally {
+        verifyYes.disabled = false;
+      }
+    })();
+    return;
+  }
+
+  const verifyNo = e.target.closest('[data-action="verify-no"]');
+  if (verifyNo) {
+    e.stopPropagation();
+    const id = verifyNo.getAttribute("data-id");
+    if (!id) return;
+    verifyNo.disabled = true;
+    (async () => {
+      try {
+        const res = await fetch(`/api/payments/${encodeURIComponent(id)}/verificado`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          cache: "no-store",
+          body: JSON.stringify({ verificado: false, rechazado: true }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          alert(data.error || "No se pudo actualizar");
+          return;
+        }
+        closeAllVerifyChoices();
+        await loadPayments();
+      } catch {
+        alert("Error de conexión");
+      } finally {
+        verifyNo.disabled = false;
+      }
+    })();
+    return;
+  }
+
+  const verifyReset = e.target.closest('[data-action="verify-reset"]');
+  if (verifyReset) {
+    e.stopPropagation();
+    const id = verifyReset.getAttribute("data-id");
+    if (!id) return;
+    verifyReset.disabled = true;
+    (async () => {
+      try {
+        const res = await fetch(`/api/payments/${encodeURIComponent(id)}/verificado`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          cache: "no-store",
+          body: JSON.stringify({ verificado: false, rechazado: false }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
@@ -330,7 +595,7 @@ tableContainer.addEventListener("click", (e) => {
       } catch {
         alert("Error de conexión");
       } finally {
-        verifyBtn.disabled = false;
+        verifyReset.disabled = false;
       }
     })();
     return;
@@ -375,13 +640,25 @@ tableContainer.addEventListener("click", (e) => {
   if (url) openComprobanteModal(url, kind || "image");
 });
 
+document.addEventListener("click", (e) => {
+  if (
+    e.target.closest(
+      '[data-action="verify-open"], [data-action="verify-yes"], [data-action="verify-no"], [data-action="verify-reset"]'
+    )
+  ) {
+    return;
+  }
+  if (e.target.closest(".verify-cell--choosing")) return;
+  closeAllVerifyChoices();
+});
+
 document.getElementById("comprobante-modal-close")?.addEventListener("click", closeComprobanteModal);
 document.getElementById("comprobante-modal-backdrop")?.addEventListener("click", closeComprobanteModal);
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") {
-    const modal = document.getElementById("comprobante-modal");
-    if (modal?.classList.contains("is-open")) closeComprobanteModal();
-  }
+  if (e.key !== "Escape") return;
+  closeAllVerifyChoices();
+  const modal = document.getElementById("comprobante-modal");
+  if (modal?.classList.contains("is-open")) closeComprobanteModal();
 });
 
 loginForm.addEventListener("submit", async (e) => {
@@ -404,6 +681,7 @@ loginForm.addEventListener("submit", async (e) => {
   loginForm.reset();
   showPanel();
   await loadPayments();
+  await loadAdminPrices();
   await loadQrPreviews();
 });
 
@@ -435,6 +713,7 @@ logoutBtn?.addEventListener("click", async () => {
     if (ok) {
       showPanel();
       await loadPayments();
+      await loadAdminPrices();
       await loadQrPreviews();
     } else {
       showLogin();

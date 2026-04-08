@@ -24,6 +24,14 @@ const paymentStatusSuccessLead = document.getElementById("payment-status-success
 const paymentStatusTokenDisplay = document.getElementById("payment-status-token-display");
 const paymentStatusSuccessHint = document.getElementById("payment-status-success-hint");
 const paymentStatusNewBtn = document.getElementById("payment-status-new-btn");
+const paymentStatusRejectedCard = document.getElementById("payment-status-rejected-card");
+const paymentStatusRejectedMsg = document.getElementById("payment-status-rejected-msg");
+const paymentStatusRejectedNewBtn = document.getElementById("payment-status-rejected-new-btn");
+const creditosOptionsEl = document.getElementById("creditos-options");
+const metodoOptionsEl = document.getElementById("metodo-options");
+
+const REJECTED_PAYMENT_MSG =
+  "Su pago fue rechazado, nos pondremos en contacto para más detalles.";
 
 const QR_ACK_KEY = "tp_qr_ack";
 const LS_PAYMENT_TOKEN = "tp_payment_token";
@@ -40,7 +48,17 @@ function isPaymentRegistroCode(value) {
 
 let statusPollTimer = null;
 
-const CREDITOS_A_SOLES = Object.freeze({ 50: 30, 80: 50, 100: 60 });
+const DEFAULT_PACKAGE_OPTIONS = Object.freeze([
+  { credits: 50, price: 30 },
+  { credits: 80, price: 50 },
+  { credits: 100, price: 60 },
+]);
+let packageOptions = DEFAULT_PACKAGE_OPTIONS.map((p) => ({ ...p }));
+let visiblePaymentMethods = {
+  yape: true,
+  plin: true,
+  mercadopago: true,
+};
 
 let currentStep = 1;
 
@@ -68,10 +86,6 @@ function setStep(step) {
   if (step1Panel) step1Panel.hidden = step !== 1;
   if (step2Panel) step2Panel.hidden = step !== 2;
   if (step3Panel) step3Panel.hidden = step !== 3;
-
-  if (step === 3) {
-    postQrReferencia.required = true;
-  }
 
   const items = [stepperItem1, stepperItem2, stepperItem3];
   items.forEach((item, i) => {
@@ -135,6 +149,10 @@ async function pollPaymentStatusOnce(token) {
   );
   if (!res.ok) return;
   const data = await res.json();
+  if (data.rechazado) {
+    showRejectedStatusUI();
+    return;
+  }
   if (data.verificado) {
     const display =
       (data.voucher_code && String(data.voucher_code).trim()) ||
@@ -150,10 +168,24 @@ function showPendingStatusUI(token) {
   if (paymentFlowCard) paymentFlowCard.hidden = true;
   if (paymentStatusPendingCard) paymentStatusPendingCard.hidden = false;
   if (paymentStatusSuccessCard) paymentStatusSuccessCard.hidden = true;
+  if (paymentStatusRejectedCard) paymentStatusRejectedCard.hidden = true;
   void pollPaymentStatusOnce(token);
   statusPollTimer = window.setInterval(() => {
     void pollPaymentStatusOnce(token);
   }, 4000);
+}
+
+function showRejectedStatusUI() {
+  stopStatusPoll();
+  msg.hidden = true;
+  if (paymentFlowCard) paymentFlowCard.hidden = true;
+  if (paymentStatusPendingCard) paymentStatusPendingCard.hidden = true;
+  if (paymentStatusSuccessCard) paymentStatusSuccessCard.hidden = true;
+  if (paymentStatusRejectedCard) paymentStatusRejectedCard.hidden = false;
+  if (paymentStatusRejectedMsg) {
+    paymentStatusRejectedMsg.textContent = REJECTED_PAYMENT_MSG;
+  }
+  paymentStatusRejectedCard?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function showVerifiedSuccessUI(displayCode) {
@@ -161,12 +193,13 @@ function showVerifiedSuccessUI(displayCode) {
   msg.hidden = true;
   if (paymentFlowCard) paymentFlowCard.hidden = true;
   if (paymentStatusPendingCard) paymentStatusPendingCard.hidden = true;
+  if (paymentStatusRejectedCard) paymentStatusRejectedCard.hidden = true;
   if (paymentStatusSuccessCard) paymentStatusSuccessCard.hidden = false;
   if (paymentStatusSuccessLead) {
-    paymentStatusSuccessLead.textContent = "Su compra fue exitosa. Su código voucher es:";
+    paymentStatusSuccessLead.textContent = "Su compra fue exitosa. Su código token es:";
   }
   if (paymentStatusTokenDisplay) {
-    paymentStatusTokenDisplay.textContent = displayCode;
+    paymentStatusTokenDisplay.value = displayCode;
   }
   if (paymentStatusSuccessHint) {
     paymentStatusSuccessHint.textContent =
@@ -184,13 +217,47 @@ function clearPaymentStatusUI() {
   }
   if (paymentStatusPendingCard) paymentStatusPendingCard.hidden = true;
   if (paymentStatusSuccessCard) paymentStatusSuccessCard.hidden = true;
+  if (paymentStatusRejectedCard) paymentStatusRejectedCard.hidden = true;
   if (paymentFlowCard) paymentFlowCard.hidden = false;
 }
 
-paymentStatusNewBtn?.addEventListener("click", () => {
+function handleNewPaymentAfterStatus() {
   clearPaymentStatusUI();
   form.reset();
   setStep(1);
+}
+
+paymentStatusNewBtn?.addEventListener("click", handleNewPaymentAfterStatus);
+paymentStatusRejectedNewBtn?.addEventListener("click", handleNewPaymentAfterStatus);
+
+document.getElementById("payment-status-copy-btn")?.addEventListener("click", async () => {
+  const input = paymentStatusTokenDisplay;
+  const btn = document.getElementById("payment-status-copy-btn");
+  const text = input && "value" in input ? String(input.value || "") : "";
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    try {
+      input.focus();
+      input.select();
+      document.execCommand("copy");
+    } catch {
+      /* ignore */
+    }
+  }
+  if (btn) {
+    const labelEl = document.getElementById("payment-status-copy-label");
+    const prevAria = btn.getAttribute("aria-label") || "Copiar código";
+    btn.setAttribute("aria-label", "Copiado al portapapeles");
+    btn.classList.add("btn-token-copy--done");
+    if (labelEl) labelEl.textContent = "Copiado";
+    window.setTimeout(() => {
+      btn.setAttribute("aria-label", prevAria);
+      btn.classList.remove("btn-token-copy--done");
+      if (labelEl) labelEl.textContent = "Copiar";
+    }, 2500);
+  }
 });
 
 async function initPaymentStatusFromUrl() {
@@ -223,7 +290,9 @@ async function initPaymentStatusFromUrl() {
     }
     if (!res.ok) return;
     const data = await res.json();
-    if (data.verificado) {
+    if (data.rechazado) {
+      showRejectedStatusUI();
+    } else if (data.verificado) {
       const display =
         (data.voucher_code && String(data.voucher_code).trim()) ||
         (data.registro_token && String(data.registro_token).trim()) ||
@@ -239,7 +308,79 @@ async function initPaymentStatusFromUrl() {
 
 function solesDesdeCreditosElegidos() {
   const v = Number(form.querySelector('input[name="creditos"]:checked')?.value);
-  return CREDITOS_A_SOLES[v] ?? null;
+  const found = packageOptions.find((pkg) => pkg.credits === v);
+  return found ? found.price : null;
+}
+
+function formatSoles(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "";
+  return n % 1 === 0 ? String(n) : n.toFixed(2);
+}
+
+function renderCreditosPrices() {
+  if (!creditosOptionsEl) return;
+  const safePackages = Array.isArray(packageOptions) && packageOptions.length ? packageOptions : [];
+  creditosOptionsEl.innerHTML = safePackages
+    .map(
+      (pkg, idx) => `<label class="radio">
+        <input type="radio" name="creditos" value="${Number(pkg.credits)}" ${idx === 0 ? "required" : ""} />
+        <span>${Number(pkg.credits)} créditos — S/ ${formatSoles(Number(pkg.price))}</span>
+      </label>`
+    )
+    .join("");
+}
+
+const PAYMENT_METHOD_LABELS = {
+  yape: "Yape",
+  plin: "Plin",
+  mercadopago: "Mercado Pago",
+};
+
+function renderPaymentMethods() {
+  if (!metodoOptionsEl) return;
+  const order = ["yape", "plin", "mercadopago"];
+  const visible = order.filter((key) => visiblePaymentMethods[key] !== false);
+  metodoOptionsEl.innerHTML = visible
+    .map(
+      (key, idx) => `<label class="radio">
+        <input type="radio" name="metodo" value="${key}" ${idx === 0 ? "required" : ""} />
+        <span>${PAYMENT_METHOD_LABELS[key]}</span>
+      </label>`
+    )
+    .join("");
+}
+
+async function loadPackagePrices() {
+  try {
+    const res = await fetch("/api/payment-qr", { cache: "no-store" });
+    if (!res.ok) return;
+    const data = await res.json().catch(() => ({}));
+    const src = Array.isArray(data?.packageOptions) ? data.packageOptions : null;
+    if (!src) return;
+    const next = [];
+    for (const pkg of src) {
+      const credits = Number(pkg?.credits);
+      const price = Number(pkg?.price);
+      if (!Number.isFinite(credits) || credits <= 0 || !Number.isFinite(price) || price <= 0) {
+        return;
+      }
+      next.push({ credits: Math.round(credits), price });
+    }
+    if (!next.length) return;
+    packageOptions = next;
+    if (data?.paymentMethods && typeof data.paymentMethods === "object") {
+      visiblePaymentMethods = {
+        yape: data.paymentMethods.yape !== false,
+        plin: data.paymentMethods.plin !== false,
+        mercadopago: data.paymentMethods.mercadopago !== false,
+      };
+    }
+    renderCreditosPrices();
+    renderPaymentMethods();
+  } catch {
+    /* ignore */
+  }
 }
 
 function openQrModal(metodo, imageUrl, soles) {
@@ -276,16 +417,12 @@ function closeQrModal(metodo) {
   }
 }
 
-form.querySelectorAll('input[name="metodo"]').forEach((r) => {
-  r.addEventListener("change", () => {
+form.addEventListener("change", (e) => {
+  const target = e.target;
+  if (!(target instanceof HTMLInputElement)) return;
+  if (target.name === "metodo" || target.name === "creditos") {
     sessionStorage.removeItem(QR_ACK_KEY);
-  });
-});
-
-form.querySelectorAll('input[name="creditos"]').forEach((r) => {
-  r.addEventListener("change", () => {
-    sessionStorage.removeItem(QR_ACK_KEY);
-  });
+  }
 });
 
 function ackMetodoFromForm() {
@@ -412,11 +549,12 @@ function goToStep1FromUi() {
   setStep(1);
 }
 
-/** Paso 3 (Yape/Plin): número de operación obligatorio; comprobante opcional. */
+/** Paso 3 (Yape/Plin): comprobante obligatorio; número de operación opcional. */
 function isStep3CompleteForPayment(metodo) {
   if (metodo === "yape" || metodo === "plin") {
-    const ref = String(postQrReferencia?.value ?? "").trim();
-    if (!ref) return false;
+    const fileInput =
+      form.querySelector('input[name="comprobante"]') || postQrComprobante;
+    if (!fileInput?.files?.[0]) return false;
   }
   return true;
 }
@@ -462,8 +600,8 @@ form.addEventListener("submit", async (e) => {
 
   if (currentStep === 3) {
     if (!isStep3CompleteForPayment(metodo)) {
-      showMessage("Completa el número de operación para registrar el pago.", false);
-      postQrReferencia?.focus();
+      showMessage("Adjunta el comprobante (imagen o PDF) para registrar el pago.", false);
+      postQrComprobante?.focus();
       return;
     }
     if ((metodo === "yape" || metodo === "plin") && !form.checkValidity()) {
@@ -561,7 +699,9 @@ form.addEventListener("submit", async (e) => {
   }
 });
 
-initPaymentStatusFromUrl().finally(() => {
+Promise.allSettled([initPaymentStatusFromUrl(), loadPackagePrices()]).finally(() => {
+  renderCreditosPrices();
+  renderPaymentMethods();
   if (paymentFlowCard && !paymentFlowCard.hidden) {
     setStep(1);
   }

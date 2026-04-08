@@ -24,7 +24,7 @@
         <button type="submit" class="btn primary">Entrar</button>
       </form>
       <p style="margin-top: 1.25rem; margin-bottom: 0">
-        <a href="/" style="color: var(--muted); font-size: 0.9rem">← Volver al formulario</a>
+        <a href="/pago.html" style="color: var(--muted); font-size: 0.9rem">← Volver al registro de pago</a>
       </p>
     </div>
 
@@ -46,7 +46,7 @@
           <h1 class="admin-topbar-title">Administración</h1>
         </div>
         <div class="admin-topbar-actions">
-          <a href="/" class="btn ghost" style="text-decoration: none; display: inline-block">Formulario público</a>
+          <a href="/pago.html" class="btn ghost" style="text-decoration: none; display: inline-block">Registro de pago</a>
           <button type="button" class="btn ghost" id="logout-btn">Cerrar sesión</button>
         </div>
       </header>
@@ -57,6 +57,7 @@
             <button type="button" class="admin-nav-item is-active" data-view="pagos">
               Pagos
             </button>
+            <button type="button" class="admin-nav-item" data-view="precios">Precios</button>
             <button type="button" class="admin-nav-item" data-view="qr">QR</button>
           </nav>
         </aside>
@@ -111,6 +112,37 @@
                 <p id="qr-msg-plin" class="message" style="margin-top: 0.75rem; margin-bottom: 0" hidden></p>
               </div>
             </div>
+          </section>
+
+          <section id="admin-view-precios" class="admin-view" aria-labelledby="admin-precios-heading">
+            <h2 id="admin-precios-heading" class="admin-view-title">Precios del paso 2</h2>
+            <p class="lead admin-view-lead">
+              Ajusta los montos de cada paquete de créditos. Estos precios se mostrarán en el step 2
+              del formulario público y se usarán para calcular el monto del pago.
+            </p>
+            <form id="admin-prices-form" class="form" style="max-width: 560px">
+              <div id="admin-package-rows" class="admin-package-rows"></div>
+              <fieldset class="methods">
+                <legend>Métodos de pago visibles (step 2)</legend>
+                <label class="radio">
+                  <input type="checkbox" id="method-visible-yape" />
+                  <span>Yape</span>
+                </label>
+                <label class="radio">
+                  <input type="checkbox" id="method-visible-plin" />
+                  <span>Plin</span>
+                </label>
+                <label class="radio">
+                  <input type="checkbox" id="method-visible-mercadopago" />
+                  <span>Mercado Pago</span>
+                </label>
+              </fieldset>
+              <div class="step-actions">
+                <button type="button" class="btn ghost" id="admin-add-package-btn">+ Agregar paquete</button>
+                <button type="submit" class="btn primary">Guardar cambios</button>
+              </div>
+              <p id="admin-prices-msg" class="message" hidden></p>
+            </form>
           </section>
         </div>
       </div>

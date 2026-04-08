@@ -46,18 +46,115 @@ function defaultPaymentMonto() {
   return Number.isFinite(n) && n > 0 ? n : 1;
 }
 
-/** Paquetes: créditos → soles (PEN). */
-const CREDITOS_A_MONTO = Object.freeze({
-  50: 30,
-  80: 50,
-  100: 60,
+/** Paquetes por defecto (step 2). */
+const DEFAULT_PACKAGE_OPTIONS = Object.freeze([
+  { credits: 50, price: 30 },
+  { credits: 80, price: 50 },
+  { credits: 100, price: 60 },
+]);
+const DEFAULT_PAYMENT_METHODS = Object.freeze({
+  yape: true,
+  plin: true,
+  mercadopago: true,
 });
+
+const PRICE_CONFIG_PATH = path.join(rootDir, "data", "price-config.json");
+
+function normalizePackageOptions(input) {
+  if (Array.isArray(input)) {
+    if (!input.length || input.length > 30) return null;
+    const out = [];
+    for (let i = 0; i < input.length; i += 1) {
+      const credits = Number(input[i]?.credits);
+      const price = Number(input[i]?.price);
+      if (!Number.isFinite(credits) || credits <= 0 || !Number.isFinite(price) || price <= 0) {
+        return null;
+      }
+      out.push({
+        credits: Math.round(credits),
+        price: Number(price.toFixed(2)),
+      });
+    }
+    if (!out.length) return null;
+    const uniq = new Set(out.map((p) => p.credits));
+    if (uniq.size !== out.length) return null;
+    return out;
+  }
+
+  // Compatibilidad con formato antiguo: { "50": 30, "80": 50, ... }
+  if (input && typeof input === "object") {
+    const keys = Object.keys(input);
+    if (!keys.length) return null;
+    const legacy = [];
+    for (const k of keys) {
+      const credits = Number(k);
+      const price = Number(input[k]);
+      if (!Number.isFinite(credits) || credits <= 0 || !Number.isFinite(price) || price <= 0) {
+        return null;
+      }
+      legacy.push({ credits: Math.round(credits), price: Number(price.toFixed(2)) });
+    }
+    legacy.sort((a, b) => a.credits - b.credits);
+    const uniq = new Set(legacy.map((p) => p.credits));
+    if (uniq.size !== legacy.length) return null;
+    return legacy;
+  }
+  return null;
+}
+
+function packagePricesFromOptions(options) {
+  const out = {};
+  for (const pkg of options) out[String(pkg.credits)] = pkg.price;
+  return out;
+}
+
+function normalizePaymentMethods(input) {
+  const src = input && typeof input === "object" ? input : {};
+  const out = {
+    yape: src.yape !== false,
+    plin: src.plin !== false,
+    mercadopago: src.mercadopago !== false,
+  };
+  if (!out.yape && !out.plin && !out.mercadopago) return null;
+  return out;
+}
+
+function getPricingConfig() {
+  const fallback = {
+    packages: DEFAULT_PACKAGE_OPTIONS.map((p) => ({ ...p })),
+    paymentMethods: { ...DEFAULT_PAYMENT_METHODS },
+  };
+  try {
+    const raw = fs.readFileSync(PRICE_CONFIG_PATH, "utf8");
+    const parsed = JSON.parse(raw);
+    const packages = normalizePackageOptions(parsed?.packages ?? parsed);
+    const paymentMethods = normalizePaymentMethods(parsed?.paymentMethods);
+    return {
+      packages: packages || fallback.packages,
+      paymentMethods: paymentMethods || fallback.paymentMethods,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function savePricingConfig(input) {
+  const packages = normalizePackageOptions(input?.packageOptions ?? input?.packages ?? input);
+  if (!packages) throw new Error("Paquetes inválidos. Revisa créditos y precios.");
+  const paymentMethods = normalizePaymentMethods(input?.paymentMethods);
+  if (!paymentMethods) throw new Error("Debe haber al menos un método de pago visible.");
+  const next = { packages, paymentMethods };
+  fs.mkdirSync(path.dirname(PRICE_CONFIG_PATH), { recursive: true });
+  fs.writeFileSync(PRICE_CONFIG_PATH, JSON.stringify(next, null, 2), "utf8");
+  return next;
+}
 
 function montoDesdeCreditos(creditosRaw) {
   const c = Number(creditosRaw);
   if (!Number.isFinite(c)) return null;
-  const m = CREDITOS_A_MONTO[c];
-  return m != null ? m : null;
+  const options = getPricingConfig().packages;
+  const found = options.find((pkg) => pkg.credits === c);
+  return found ? found.price : null;
 }
 
 const UUID_RE =
@@ -202,13 +299,49 @@ app.get("/api/admin/me", (req, res) => {
 
 app.get("/api/payment-qr", (_req, res) => {
   try {
+    const pricing = getPricingConfig();
+    const packageOptions = pricing.packages;
     res.json({
       ...listPaymentQrUrls(rootDir),
       defaultMonto: defaultPaymentMonto(),
+      packageOptions,
+      packagePrices: packagePricesFromOptions(packageOptions),
+      paymentMethods: pricing.paymentMethods,
     });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "No se pudieron leer los códigos QR" });
+  }
+});
+
+app.get("/api/admin/prices", requireAdmin, (_req, res) => {
+  try {
+    const pricing = getPricingConfig();
+    const packageOptions = pricing.packages;
+    res.json({
+      packageOptions,
+      packagePrices: packagePricesFromOptions(packageOptions),
+      paymentMethods: pricing.paymentMethods,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "No se pudieron leer los precios." });
+  }
+});
+
+app.put("/api/admin/prices", requireAdmin, (req, res) => {
+  try {
+    const payload = req.body ?? {};
+    const saved = savePricingConfig(payload);
+    res.json({
+      ok: true,
+      packageOptions: saved.packages,
+      packagePrices: packagePricesFromOptions(saved.packages),
+      paymentMethods: saved.paymentMethods,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "No se pudieron guardar los precios.";
+    res.status(400).json({ error: message });
   }
 });
 
@@ -291,6 +424,10 @@ app.post("/api/webhooks/mercadopago", handleMercadoPagoWebhook);
 
 app.post("/api/payments/mercadopago/checkout", async (req, res, next) => {
   try {
+    const paymentMethods = getPricingConfig().paymentMethods;
+    if (!paymentMethods.mercadopago) {
+      return res.status(400).json({ error: "Mercado Pago está temporalmente deshabilitado." });
+    }
     if (!isMercadoPagoConfigured()) {
       return res.status(503).json({
         error:
@@ -305,7 +442,7 @@ app.post("/api/payments/mercadopago/checkout", async (req, res, next) => {
     const amount = montoDesdeCreditos(creditos);
     if (amount == null) {
       return res.status(400).json({
-        error: "Elige un paquete de créditos válido (50, 80 o 100).",
+        error: "Elige un paquete de créditos válido.",
       });
     }
 
@@ -365,6 +502,7 @@ app.post("/api/payments", uploadComprobante.any(), async (req, res, next) => {
       (req.files && req.files.find((f) => f.fieldname === "comprobante")) || req.file;
     const { nombre, email, telefono, metodo, referencia, creditos } = req.body || {};
     const methods = ["yape", "plin", "mercadopago"];
+    const paymentMethods = getPricingConfig().paymentMethods;
     const n = String(nombre || "").trim();
     const e = String(email || "").trim();
     const t = String(telefono || "").trim();
@@ -373,7 +511,7 @@ app.post("/api/payments", uploadComprobante.any(), async (req, res, next) => {
     const amount = montoDesdeCreditos(creditos);
     if (amount == null) {
       return res.status(400).json({
-        error: "Elige un paquete de créditos válido (50, 80 o 100).",
+        error: "Elige un paquete de créditos válido.",
       });
     }
     const c = Number(creditos);
@@ -384,6 +522,9 @@ app.post("/api/payments", uploadComprobante.any(), async (req, res, next) => {
     if (!methods.includes(m)) {
       return res.status(400).json({ error: "Método de pago no válido" });
     }
+    if (paymentMethods[m] === false) {
+      return res.status(400).json({ error: "Método de pago no disponible actualmente." });
+    }
     if (m === "mercadopago") {
       return res.status(400).json({
         error:
@@ -391,8 +532,8 @@ app.post("/api/payments", uploadComprobante.any(), async (req, res, next) => {
       });
     }
 
-    if ((m === "yape" || m === "plin") && !ref) {
-      return res.status(400).json({ error: "El número de operación es obligatorio." });
+    if ((m === "yape" || m === "plin") && !file?.buffer?.length) {
+      return res.status(400).json({ error: "El comprobante es obligatorio." });
     }
 
     let comprobantePath = null;
@@ -428,8 +569,11 @@ app.get("/api/payment-status", async (req, res, next) => {
     if (!row) {
       return res.status(404).json({ error: "No encontrado" });
     }
+    const verificado = Boolean(row.verificado);
+    const rechazado = Boolean(row.verificacion_rechazada) && !verificado;
     res.json({
-      verificado: Boolean(row.verificado),
+      verificado,
+      rechazado,
       registro_token: row.registro_token,
       voucher_code: row.voucher_code || null,
     });
@@ -470,9 +614,11 @@ app.patch("/api/payments/:id/verificado", requireAdmin, async (req, res, next) =
       }
     }
 
+    const rechazado = req.body?.rechazado === true;
+
     let row;
     try {
-      row = await setPaymentVerificado(id, v, voucherCode);
+      row = await setPaymentVerificado(id, v, voucherCode, { rechazada: v ? false : rechazado });
     } catch (dbErr) {
       const pgDup = dbErr?.code === "23505";
       const sqliteDup = /UNIQUE|constraint/i.test(String(dbErr?.message || ""));

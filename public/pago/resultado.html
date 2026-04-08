@@ -30,7 +30,7 @@
         } catch {
           /* ignore */
         }
-        window.location.replace("/?token=" + encodeURIComponent(token));
+        window.location.replace("/pago.html?token=" + encodeURIComponent(token));
       } else {
         const estado = (params.get("estado") || "").toLowerCase();
         const title = document.getElementById("title");
