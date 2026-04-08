@@ -26,7 +26,10 @@ import {
   mapMercadoPagoPaymentStatus,
   isMercadoPagoConfigured,
 } from "./lib/mercadopago.js";
-import { fetchVoucherForCreditPackage } from "./lib/voucherService.js";
+import {
+  fetchVoucherForCreditPackage,
+  resolveVoucherGenerateUrl,
+} from "./lib/voucherService.js";
 import { removeComprobanteFile, saveComprobanteFile } from "./lib/comprobanteStorage.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -76,21 +79,32 @@ function isRegistroTokenLike(s) {
 
 function voucherErrorMessage(err) {
   const c = err?.code;
+  let targetUrl = "";
+  try {
+    targetUrl = resolveVoucherGenerateUrl();
+  } catch {
+    targetUrl = "";
+  }
+  const prodHint =
+    "En Vercel añade VOUCHER_GENERATE_URL (URL completa …/admin/vouchers/generate) o VOUCHER_SERVICE_URL (solo el dominio público del API; no uses localhost).";
   if (c === "AbortError" || err?.name === "AbortError") {
-    return "El servicio de vouchers no respondió a tiempo. Comprueba que esté en ejecución en el puerto 8000.";
+    return `El servicio de vouchers no respondió a tiempo (${targetUrl || "URL no configurada"}). ${prodHint}`;
   }
   const net = err?.cause?.code || c;
   if (net === "ECONNREFUSED" || net === "ENOTFOUND") {
-    return "No hay conexión con el servicio de vouchers (http://localhost:8000/). Inícialo e inténtalo de nuevo.";
+    if (targetUrl.includes("localhost") || targetUrl.includes("127.0.0.1")) {
+      return `El servidor intenta llamar a ${targetUrl}, que no existe en producción. ${prodHint}`;
+    }
+    return `No hay conexión con el servicio de vouchers (${targetUrl}). Comprueba que el API esté en línea y la URL en variables de entorno.`;
   }
   switch (c) {
     case "VOUCHER_ADMIN_TOKEN_REQUIRED":
-      return "Falta VOUCHER_ADMIN_TOKEN en .env (cabecera X-Admin-Token del API Futbol Bot).";
+      return "Falta VOUCHER_ADMIN_TOKEN (cabecera X-Admin-Token del API Futbol Bot). Configúralo en .env local o en Environment Variables de Vercel.";
     case "VOUCHER_HTTP":
       if (err.status === 401 || err.status === 403) {
-        return "El API de vouchers rechazó la petición (401/403). Revisa que VOUCHER_ADMIN_TOKEN en .env coincida con X-Admin-Token del servicio en :8000.";
+        return "El API de vouchers rechazó la petición (401/403). Revisa que VOUCHER_ADMIN_TOKEN coincida con X-Admin-Token del servicio.";
       }
-      return "No se pudo obtener el voucher (error HTTP). Revisa el servicio en http://localhost:8000/";
+      return `No se pudo obtener el voucher (HTTP ${err.status ?? "?"}). Revisa el API en ${targetUrl || "tu URL configurada"}.`;
     case "VOUCHER_INVALID_JSON":
     case "VOUCHER_INVALID_BODY":
       return "Respuesta inválida del servicio de vouchers.";
@@ -103,7 +117,7 @@ function voucherErrorMessage(err) {
     case "VOUCHER_INVALID_EXPECTED_CREDITS":
       return "Créditos del pago no válidos para generar el voucher.";
     default:
-      return "No se pudo obtener el código de voucher. Comprueba que el servicio en http://localhost:8000/ esté disponible.";
+      return `No se pudo obtener el código de voucher. Comprueba el API (${targetUrl || "configura la URL"}). ${prodHint}`;
   }
 }
 
